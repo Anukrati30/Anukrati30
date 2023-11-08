@@ -9,3 +9,5 @@ Anukrati30/Anukrati30 is a ✨ special ✨ repository because its `README.md` (t
 You can click the Preview link to take a look at your changes.
 --->
 FAKE CURRENCY DETECTION ON INDIAN CURRENCY
+The proposed system gives an approach to verify the Indian currency notes.  Verification of currency notes is done by the concepts of image processing. The approach presented is  based on the physical appearance of the Indian currency. The technology of currency recognition aims for identifying and extracting visible and invisible features of currency notes. Detecting fake notes includes image Acquisition, Image pre-processing, Image adjusting, Gray-scale conversion, Edge detection, Image Segmentation, and Feature extraction classification every step required an algorithm for which using OpenCV library features of currency notes like security thread, Identification mark,  and the signature of the RBI Governor, were extracted which is then matched and compared using  FLANN to verify whether the image is legitimate or not. 
+

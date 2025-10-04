@@ -63,6 +63,21 @@ type OSDOptions = {
   tileSources: string;
 };
 
+type OSDTileSource = {
+  getTileUrl: (level: number, x: number, y: number) => string;
+  _getTileUrlOriginal?: (level: number, x: number, y: number) => string;
+};
+
+type OSDItem = {
+  source?: OSDTileSource;
+  getTileSource?: () => OSDTileSource | undefined;
+};
+
+type OSDWorld = {
+  getItemCount: () => number;
+  getItemAt: (index: number) => OSDItem | null;
+};
+
 const SAMPLE_DATASETS: Dataset[] = [
   {
     id: "andromeda-demo",
@@ -140,6 +155,7 @@ export default function HomePage() {
   const [isLoggedIn] = useState(false); // placeholder until auth is wired
   const [nasaItems, setNasaItems] = useState<NasaItem[]>([]);
   const [tileError, setTileError] = useState<string | null>(null);
+  const [aiEnhance, setAiEnhance] = useState<boolean>(false);
   const [customDatasets, setCustomDatasets] = useState<Dataset[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -245,7 +261,13 @@ export default function HomePage() {
             "https://openseadragon.github.io/example-images/duomo/duomo.dzi"
           );
         });
-        instance.addHandler("open", () => setTileError(null));
+        instance.addHandler("open", () => {
+          setTileError(null);
+          // apply AI rewrite when viewer opens
+          try {
+            applyAiRewrite(instance, aiEnhance);
+          } catch {}
+        });
         viewerInstanceRef.current = instance;
       } else {
         viewerInstanceRef.current.open(selectedDataset.dziUrl);
@@ -255,7 +277,29 @@ export default function HomePage() {
     return () => {
       disposed = true;
     };
-  }, [selectedDataset]);
+  }, [selectedDataset, aiEnhance]);
+
+  function applyAiRewrite(viewer: OSDViewer, enabled: boolean) {
+    // Access world using unknown casting but keep typed locals to avoid `any`.
+    const world = (viewer as unknown as { world?: OSDWorld }).world;
+    if (!world || world.getItemCount() < 1) return;
+    const item = world.getItemAt(0) ?? undefined;
+    const source: OSDTileSource | undefined = item?.source ?? item?.getTileSource?.();
+    if (!source || typeof source.getTileUrl !== "function") return;
+    if (enabled) {
+      if (!source._getTileUrlOriginal) {
+        source._getTileUrlOriginal = source.getTileUrl.bind(source);
+      }
+      const original: (level: number, x: number, y: number) => string = source._getTileUrlOriginal;
+      source.getTileUrl = (level: number, x: number, y: number) => {
+        const raw = original(level, x, y);
+        const proxied = `/api/ai/superres?url=${encodeURIComponent(raw)}&scale=2&model=swinir-x2`;
+        return proxied;
+      };
+    } else if (source._getTileUrlOriginal) {
+      source.getTileUrl = source._getTileUrlOriginal;
+    }
+  }
 
   function zoomIn() {
     const viewer = viewerInstanceRef.current;
@@ -651,6 +695,17 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setAiEnhance((v) => !v)}
+                    className={`h-9 px-3 inline-flex items-center gap-2 rounded-xl border text-sm ${
+                      aiEnhance
+                        ? "bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black border-white/20"
+                        : "bg-white/10 hover:bg-white/15 border-white/10"
+                    }`}
+                    title="AI super-resolution proxy"
+                  >
+                    <Sparkles className="h-4 w-4" /> {aiEnhance ? "AI On" : "AI Off"}
+                  </button>
+                  <button
                     onClick={goFullscreen}
                     className="h-9 w-9 grid place-items-center rounded-xl bg-white/10 hover:bg-white/15 border border-white/10"
                     title="Fullscreen"
@@ -680,6 +735,11 @@ export default function HomePage() {
                   </span>
                 ))}
               </div>
+              {aiEnhance && (
+                <div className="mt-3 inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full bg-fuchsia-500/15 border border-fuchsia-400/30 text-fuchsia-200">
+                  <Sparkles className="h-3 w-3" /> AI enhanced tiles (proxy)
+                </div>
+              )}
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-3">
               <h4 className="font-semibold tracking-tight">Actions</h4>

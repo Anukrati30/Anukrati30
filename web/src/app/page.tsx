@@ -118,20 +118,43 @@ const SAMPLE_DATASETS: Dataset[] = [
   },
 ];
 
+type NasaItem = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  tags: string[];
+};
+
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDataset, setSelectedDataset] = useState<Dataset>(
     SAMPLE_DATASETS[0]
   );
   const [isLoggedIn] = useState(false); // placeholder until auth is wired
+  const [nasaItems, setNasaItems] = useState<NasaItem[]>([]);
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
 
   const filteredDatasets = useMemo(() => {
-    if (!searchQuery.trim()) return SAMPLE_DATASETS;
+    const all: Array<Dataset | (NasaItem & { dziUrl?: string })> = [
+      ...SAMPLE_DATASETS,
+      ...nasaItems.map((n) => ({
+        id: `nasa-${n.id}`,
+        title: n.title,
+        description: n.description,
+        category: n.category,
+        dziUrl: "", // NASA APOD not deep-zoom; opens thumbnail placeholder
+        thumbnailUrl: n.thumbnailUrl,
+        tags: n.tags,
+      })),
+    ];
+    if (!searchQuery.trim()) return all as Dataset[];
     const q = searchQuery.toLowerCase();
-    return SAMPLE_DATASETS.filter((d) =>
+    return (all as Dataset[]).filter((d) =>
       [
         d.title.toLowerCase(),
         d.description.toLowerCase(),
@@ -139,7 +162,40 @@ export default function HomePage() {
         d.tags.join(" ").toLowerCase(),
       ].some((field) => field.includes(q))
     );
-  }, [searchQuery]);
+  }, [searchQuery, nasaItems]);
+
+  useEffect(() => {
+    async function loadAPOD() {
+      try {
+        const res = await fetch("/api/nasa/apod?count=9");
+        if (!res.ok) return;
+        const data = (await res.json()) as Array<{
+          id: string;
+          title: string;
+          explanation: string;
+          url: string;
+          thumbnail_url?: string;
+          media_type: string;
+          date: string;
+        }>;
+        const mapped: NasaItem[] = data
+          .filter((i) => i.media_type === "image")
+          .map((i) => ({
+            id: i.id ?? i.date,
+            title: i.title,
+            description: i.explanation,
+            category: "NASA APOD",
+            imageUrl: i.url,
+            thumbnailUrl: i.thumbnail_url || i.url,
+            tags: ["nasa", "apod"],
+          }));
+        setNasaItems(mapped);
+      } catch {
+        // ignore
+      }
+    }
+    loadAPOD();
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -354,7 +410,7 @@ export default function HomePage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
                   <span className="text-xs px-2 py-1 rounded-full bg-white/10 border border-white/10">
-                    {d.category}
+                    {"category" in d ? (d as Dataset).category : "NASA APOD"}
                   </span>
                   <span className="text-xs text-white/70">Click to view</span>
                 </div>
@@ -423,6 +479,11 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+            {selectedDataset.dziUrl === "" && (
+              <div className="mt-3 text-xs text-white/60">
+                This NASA APOD item is not a deep-zoom tile source, displaying thumbnail instead.
+              </div>
+            )}
           </div>
           <aside className="lg:col-span-4 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">

@@ -35,6 +35,7 @@ type OSDViewer = {
   viewport: OSDViewport;
   setFullScreen: (flag: boolean) => void;
   open: (tileSource: string) => void;
+  addHandler: (eventName: string, handler: (event: unknown) => void) => void;
 };
 
 type OSDGestureSettings = {
@@ -88,10 +89,9 @@ const SAMPLE_DATASETS: Dataset[] = [
     description:
       "Pan across patterns reminiscent of martian dunes using demo tiles.",
     category: "Mars",
-    dziUrl:
-      "https://openseadragon.github.io/example-images/hiroshige/hiroshige.dzi",
+    dziUrl: "https://openseadragon.github.io/example-images/highsmith/highsmith.dzi",
     thumbnailUrl:
-      "https://openseadragon.github.io/example-images/hiroshige/hiroshige_files/10/0_0.jpg",
+      "https://openseadragon.github.io/example-images/highsmith/highsmith_files/10/0_0.jpg",
     tags: ["mars", "dunes", "patterns"],
   },
   {
@@ -135,6 +135,7 @@ export default function HomePage() {
   );
   const [isLoggedIn] = useState(false); // placeholder until auth is wired
   const [nasaItems, setNasaItems] = useState<NasaItem[]>([]);
+  const [tileError, setTileError] = useState<string | null>(null);
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
@@ -223,6 +224,14 @@ export default function HomePage() {
           },
           tileSources: selectedDataset.dziUrl,
         });
+        // Fallback handler in case tile source fails
+        instance.addHandler("open-failed", () => {
+          setTileError("Tile source failed to load. Switched to fallback.");
+          instance.open(
+            "https://openseadragon.github.io/example-images/duomo/duomo.dzi"
+          );
+        });
+        instance.addHandler("open", () => setTileError(null));
         viewerInstanceRef.current = instance;
       } else {
         viewerInstanceRef.current.open(selectedDataset.dziUrl);
@@ -447,6 +456,11 @@ export default function HomePage() {
                   Live Viewer
                 </span>
               </div>
+              {tileError && (
+                <div className="absolute top-3 right-3 z-20 text-xs px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-200">
+                  {tileError}
+                </div>
+              )}
               <div
                 ref={viewerContainerRef}
                 className="h-[60vh] min-h-[420px] w-full"

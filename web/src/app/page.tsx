@@ -14,6 +14,10 @@ import {
   ZoomIn,
   ZoomOut,
   Eye,
+  Plus,
+  X,
+  Tag as TagIcon,
+  Link as LinkIcon,
 } from "lucide-react";
 
 type Dataset = {
@@ -136,12 +140,22 @@ export default function HomePage() {
   const [isLoggedIn] = useState(false); // placeholder until auth is wired
   const [nasaItems, setNasaItems] = useState<NasaItem[]>([]);
   const [tileError, setTileError] = useState<string | null>(null);
+  const [customDatasets, setCustomDatasets] = useState<Dataset[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState("NASA");
+  const [newDescription, setNewDescription] = useState("");
+  const [newTileUrl, setNewTileUrl] = useState("");
+  const [newThumbUrl, setNewThumbUrl] = useState("");
+  const [newTags, setNewTags] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
 
   const filteredDatasets = useMemo(() => {
     const all: Array<Dataset | (NasaItem & { dziUrl?: string })> = [
+      ...customDatasets,
       ...SAMPLE_DATASETS,
       ...nasaItems.map((n) => ({
         id: `nasa-${n.id}`,
@@ -163,7 +177,7 @@ export default function HomePage() {
         d.tags.join(" ").toLowerCase(),
       ].some((field) => field.includes(q))
     );
-  }, [searchQuery, nasaItems]);
+  }, [searchQuery, nasaItems, customDatasets]);
 
   useEffect(() => {
     async function loadAPOD() {
@@ -401,6 +415,17 @@ export default function HomePage() {
             {filteredDatasets.length} result{filteredDatasets.length !== 1 ? "s" : ""}
           </span>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+          >
+            <Plus className="h-4 w-4" /> Add NASA/IIIF/DZI dataset
+          </button>
+          <span className="text-xs text-white/50">
+            Paste a DZI or IIIF Image/Manifest URL
+          </span>
+        </div>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredDatasets.map((d) => (
             <div
@@ -452,6 +477,138 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-[100] grid place-items-center p-4 bg-black/60">
+          <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#121223] p-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Add dataset (DZI or IIIF)</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="h-8 w-8 grid place-items-center rounded-lg bg-white/10 hover:bg-white/15"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <label className="text-sm">
+                <span className="text-white/70">Title</span>
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none"
+                  placeholder="e.g., MRO Mars Mosaic (2020)"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-white/70">Category</span>
+                <input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none"
+                  placeholder="Mars, Moon, Earth, Deep Space..."
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-white/70">Description</span>
+                <textarea
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none min-h-24"
+                  placeholder="What can users explore here?"
+                />
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-sm">
+                  <span className="text-white/70 flex items-center gap-1"><LinkIcon className="h-3 w-3" /> DZI or IIIF URL</span>
+                  <input
+                    value={newTileUrl}
+                    onChange={(e) => setNewTileUrl(e.target.value)}
+                    className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none"
+                    placeholder="https://... .dzi or IIIF image/manifest"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="text-white/70">Thumbnail URL</span>
+                  <input
+                    value={newThumbUrl}
+                    onChange={(e) => setNewThumbUrl(e.target.value)}
+                    className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none"
+                    placeholder="https://... preview.jpg"
+                  />
+                </label>
+              </div>
+              <label className="text-sm">
+                <span className="text-white/70 flex items-center gap-1"><TagIcon className="h-3 w-3" /> Tags (comma-separated)</span>
+                <input
+                  value={newTags}
+                  onChange={(e) => setNewTags(e.target.value)}
+                  className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none"
+                  placeholder="craters, dust storm, infrared"
+                />
+              </label>
+              {formError && (
+                <div className="text-amber-300 text-sm">{formError}</div>
+              )}
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setFormError(null);
+                  const isIIIFManifest = /\/manifest(\.json)?$/i.test(newTileUrl);
+                  const isIIIFImage = /\/info\.json$/i.test(newTileUrl);
+                  const isDZI = /\.dzi(\?|$)/i.test(newTileUrl);
+                  if (!newTitle || !newTileUrl) {
+                    setFormError("Title and DZI/IIIF URL are required.");
+                    return;
+                  }
+                  let dziUrl = newTileUrl;
+                  if (isIIIFManifest) {
+                    // naive: keep manifest URL; real impl would parse and select image
+                    dziUrl = newTileUrl;
+                  } else if (isIIIFImage) {
+                    dziUrl = newTileUrl;
+                  } else if (!isDZI) {
+                    setFormError("Provide a valid .dzi, IIIF manifest, or IIIF info.json URL.");
+                    return;
+                  }
+                  const ds: Dataset = {
+                    id: `custom-${Date.now()}`,
+                    title: newTitle,
+                    description: newDescription || "User provided dataset",
+                    category: newCategory || "NASA",
+                    dziUrl,
+                    thumbnailUrl: newThumbUrl || newTileUrl,
+                    tags: newTags
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  };
+                  setCustomDatasets((prev) => [ds, ...prev]);
+                  setSelectedDataset(ds);
+                  setShowAddModal(false);
+                  setNewTitle("");
+                  setNewCategory("NASA");
+                  setNewDescription("");
+                  setNewTileUrl("");
+                  setNewThumbUrl("");
+                  setNewTags("");
+                }}
+                className="px-3 py-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black font-semibold text-sm"
+              >
+                Add dataset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Viewer */}
       <section

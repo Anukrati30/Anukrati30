@@ -403,10 +403,20 @@ export default function HomePage() {
         </div>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredDatasets.map((d) => (
-            <button
+            <div
               key={d.id}
+              role="button"
+              tabIndex={0}
               onClick={() => setSelectedDataset(d)}
-              className="group text-left rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] transition shadow hover:shadow-fuchsia-500/10"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelectedDataset(d);
+                }
+              }}
+              className={
+                "group cursor-pointer text-left rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] transition shadow hover:shadow-fuchsia-500/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400/70"
+              }
             >
               <div className="relative aspect-[16/10] overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -416,8 +426,8 @@ export default function HomePage() {
                   className="h-full w-full object-cover group-hover:scale-[1.03] transition duration-300"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex items-center justify-between">
                   <span className="text-xs px-2 py-1 rounded-full bg-white/10 border border-white/10">
                     {"category" in d ? (d as Dataset).category : "NASA APOD"}
                   </span>
@@ -438,7 +448,7 @@ export default function HomePage() {
                   ))}
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </section>

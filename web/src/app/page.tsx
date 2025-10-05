@@ -1043,6 +1043,20 @@ export default function HomePage() {
                   >
                     <Flag className="h-4 w-4" /> {drawMode ? "Pin On" : "Pin Off"}
                   </button>
+                  {selectedDataset.imageUrl && (
+                    <button
+                      onClick={async () => {
+                        const res = await fetch(`/api/ai/enhance?url=${encodeURIComponent(selectedDataset.imageUrl!)}`);
+                        if (!res.ok) return;
+                        const { url } = (await res.json()) as { url: string };
+                        setSelectedDataset({ ...selectedDataset, imageUrl: url, thumbnailUrl: url });
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm bg-white/5 hover:bg-white/10 border-white/10"
+                      title="Enhance uploaded image"
+                    >
+                      <Sparkles className="h-4 w-4" /> Enhance image
+                    </button>
+                  )}
                   {drawMode && (
                     <span className="text-xs text-white/60">Click the image to place a pin</span>
                   )}

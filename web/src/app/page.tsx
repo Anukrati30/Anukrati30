@@ -84,23 +84,43 @@ type OSDWorld = {
 const SAMPLE_DATASETS: Dataset[] = [
   {
     id: "andromeda-demo",
-    title: "Andromeda Galaxy (JPG)",
-    description: "Single-image zoom.",
+    title: "Andromeda Galaxy",
+    description: "The Andromeda Galaxy (M31) is the nearest spiral galaxy to the Milky Way, located about 2.5 million light-years away. It is the largest galaxy in the Local Group, containing over a trillion stars, and is on a collision course with the Milky Way, expected to merge in about 4.5 billion years.",
     category: "Galaxy",
     dziUrl: "",
-    imageUrl: "/images/stellar.jpg", // place in public/images/stellar.jpg
+    imageUrl: "/images/ando.jpg", // place in public/images/stellar.jpg
     thumbnailUrl: "/images/stellar.jpg",
     tags: ["galaxy", "stars", "deep field"],
   },
   {
     id: "mars-demo",
-    title: "Mars Dune Fields (JPG)",
-    description: "Single-image zoom.",
+    title: "Mars Dune Fields",
+    description: "This image shows the surface of Mars captured by a lander. It features dust-covered terrain, rocks, and the lander’s instruments, including a dome-shaped sensor or seismometer, highlighting a Mars exploration mission setup.",
     category: "Mars",
     dziUrl: "",
-    imageUrl: "/images/mars.jpg", // place in public/images/mars.jpg
-    thumbnailUrl: "/images/mars.jpg",
+    imageUrl: "/images/mars-1.jpg", // place in public/images/mars.jpg
+    thumbnailUrl: "/images/mars-2.jpg",
     tags: ["mars", "dunes", "patterns"],
+  },
+  {
+    id: "moon-demo",
+    title: "Moon Surface",
+    description: "A detailed view of the Moon’s surface, showing its craters, plains, and rugged terrain.",
+    category: "Moon",
+    dziUrl: "",
+    imageUrl: "/images/moon-1.jpg", // place in public/images/mars.jpg
+    thumbnailUrl: "/images/moon-2.jpg",
+    tags: ["moon", "crater", "patterns"],
+  },
+  {
+    id: "star cluster NGC 602-demo",
+    title: "star cluster NGC 602",
+    description: "The star cluster NGC 602 lies on the outskirts of the Small Magellanic Cloud, which is one of the closest galaxies to the Milky Way, about 200,000 light-years from Earth. ",
+    category: "star cluster",
+    dziUrl: "",
+    imageUrl: "/images/star-2.jpg", // place in public/images/mars.jpg
+    thumbnailUrl: "/images/star-1.jpg",
+    tags: ["star cluster", "Milky Way,", "Magellanic Cloud"],
   },
 ];
 

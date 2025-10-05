@@ -445,6 +445,27 @@ export default function HomePage() {
     }
   }
 
+  async function deleteAnnotation(id: string) {
+    await fetch(`/api/annotations?datasetId=${encodeURIComponent(selectedDataset.id)}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+  }
+
+  async function clearAllPins() {
+    const ids = pointAnnotations.map((p) => p.id);
+    clearPins();
+    setPointAnnotations([]);
+    await Promise.all(ids.map((id) => deleteAnnotation(id)));
+  }
+
+  async function clearAllNotes() {
+    const ids = notes.map((n) => n.id);
+    setNotes([]);
+    await Promise.all(ids.map((id) => deleteAnnotation(id)));
+  }
+
   function zoomIn() {
     const viewer = viewerInstanceRef.current;
     if (!viewer) return;
@@ -1058,11 +1079,21 @@ export default function HomePage() {
                   </div>
                   <ul className="mt-3 space-y-2 max-h-48 overflow-auto pr-1">
                     {notes.map((n) => (
-                      <li key={n.id} className="text-xs text-white/80 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                        {n.text}
+                      <li key={n.id} className="text-xs text-white/80 bg-white/5 border border-white/10 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                        <span>{n.text}</span>
+                        <button
+                          onClick={() => deleteAnnotation(n.id)}
+                          className="text-[10px] px-2 py-1 rounded bg-white/10 hover:bg-white/15"
+                        >
+                          Delete
+                        </button>
                       </li>
                     ))}
                   </ul>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button onClick={clearAllPins} className="text-xs px-2 py-1 rounded bg-white/10 border border-white/10">Clear pins</button>
+                    <button onClick={clearAllNotes} className="text-xs px-2 py-1 rounded bg-white/10 border border-white/10">Clear notes</button>
+                  </div>
                 </div>
               <p className="text-xs text-white/50">
                   Notes are saved locally per dataset.

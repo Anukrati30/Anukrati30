@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Layers,
   Maximize2,
@@ -151,6 +151,14 @@ type NasaItem = {
 };
 
 type Note = { id: string; type: "note"; text: string; createdAt: string };
+type PointAnnotation = {
+  id: string;
+  type: "point";
+  xpct: number;
+  ypct: number;
+  label: string;
+  createdAt: string;
+};
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,6 +184,17 @@ export default function HomePage() {
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteText, setNoteText] = useState("");
+  const imageDimsRef = useRef<{ width: number; height: number } | null>(null);
+  const [pointAnnotations, setPointAnnotations] = useState<PointAnnotation[]>([]);
+  const pinElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const [pinPopup, setPinPopup] = useState<{
+    visible: boolean;
+    left: number;
+    top: number;
+    xpct: number;
+    ypct: number;
+    tempLabel: string;
+  }>({ visible: false, left: 0, top: 0, xpct: 0, ypct: 0, tempLabel: "" });
 
   const filteredDatasets = useMemo(() => {
     const all: Array<Dataset | (NasaItem & { dziUrl?: string })> = [
@@ -278,7 +297,7 @@ export default function HomePage() {
           try {
             applyAiRewrite(instance, aiEnhance);
           } catch {}
-          // Load existing notes for this dataset
+          // Load existing notes & pins for this dataset
           try {
             const res = await fetch(`/api/annotations?datasetId=${encodeURIComponent(selectedDataset.id)}`);
             if (res.ok) {
@@ -292,6 +311,17 @@ export default function HomePage() {
                 );
               });
               setNotes(allNotes);
+              const pins: PointAnnotation[] = arr.filter((d): d is PointAnnotation => {
+                return (
+                  typeof d === "object" && d !== null &&
+                  (d as { type?: string }).type === "point" &&
+                  typeof (d as { xpct?: unknown }).xpct === "number" &&
+                  typeof (d as { ypct?: unknown }).ypct === "number" &&
+                  typeof (d as { label?: unknown }).label === "string"
+                );
+              });
+              setPointAnnotations(pins);
+              // Prepare for pin overlay rendering after dimensions known
             }
           } catch {}
         });
@@ -309,6 +339,26 @@ export default function HomePage() {
       disposed = true;
     };
   }, [selectedDataset, aiEnhance, drawMode]);
+
+  // Position pins after viewport/tiles fully ready
+  useEffect(() => {
+    const viewer = viewerInstanceRef.current as unknown as {
+      world: { getItemAt: (i: number) => { source: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } }; imageToViewportCoordinates: (x: number, y: number) => { x: number; y: number } } };
+      addHandler: (ev: string, cb: () => void) => void;
+    };
+    if (!viewer) return;
+    const item = viewer.world.getItemAt(0);
+    if (!item) return;
+    const ts = item.source;
+    const iw = ts.width ?? ts.dimensions?.x ?? ts.dimensions?.width ?? 1;
+    const ih = ts.height ?? ts.dimensions?.y ?? ts.dimensions?.height ?? 1;
+    imageDimsRef.current = { width: iw, height: ih };
+    renderAllPins(pointAnnotations);
+    // Reposition pins on zoom/pan
+    const onAnim = () => renderAllPins(pointAnnotations);
+    (viewer as unknown as { addHandler: (e: string, cb: () => void) => void }).addHandler("animation", onAnim);
+    (viewer as unknown as { addHandler: (e: string, cb: () => void) => void }).addHandler("animation-finish", onAnim);
+  }, [pointAnnotations]);
 
   function applyAiRewrite(viewer: OSDViewer, enabled: boolean) {
     // Access world using unknown casting but keep typed locals to avoid `any`.
@@ -351,6 +401,35 @@ export default function HomePage() {
       body: JSON.stringify({ datasetId: selectedDataset.id, annotation: n }),
     });
     setNoteText("");
+  }
+
+  function clearPins() {
+    pinElsRef.current.forEach((el) => el.remove());
+    pinElsRef.current.clear();
+  }
+
+  function renderAllPins(pins: PointAnnotation[]) {
+    clearPins();
+    const viewer = viewerInstanceRef.current as unknown as {
+      world: { getItemAt: (i: number) => { imageToViewportCoordinates: (x: number, y: number) => { x: number; y: number } } };
+      viewport: { pixelFromPoint: (pt: { x: number; y: number }) => { x: number; y: number } };
+    };
+    const dims = imageDimsRef.current;
+    if (!viewer || !dims) return;
+    const item = viewer.world.getItemAt(0);
+    for (const p of pins) {
+      const imgX = p.xpct * dims.width;
+      const imgY = p.ypct * dims.height;
+      const vp = item.imageToViewportCoordinates(imgX, imgY);
+      const web = viewer.viewport.pixelFromPoint(vp);
+      const el = document.createElement("div");
+      el.className = "absolute -translate-x-1/2 -translate-y-full z-20";
+      el.style.left = `${web.x}px`;
+      el.style.top = `${web.y}px`;
+      el.innerHTML = `<div class=\"rounded-full bg-fuchsia-500 shadow shadow-fuchsia-500/50 text-white w-6 h-6 grid place-items-center\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\"><path fill=\"currentColor\" d=\"M12 2c3.31 0 6 2.69 6 6 0 4.5-6 14-6 14S6 12.5 6 8c0-3.31 2.69-6 6-6zm0 8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z\"/></svg></div>`;
+      viewerContainerRef.current?.appendChild(el);
+      pinElsRef.current.set(p.id, el);
+    }
   }
 
   function zoomIn() {
@@ -748,13 +827,7 @@ export default function HomePage() {
                   {tileError}
                 </div>
               )}
-              <div ref={viewerContainerRef} className="h-[60vh] min-h-[420px] w-full">
-                {selectedDataset.imageUrl && (
-                  // fallback plain image if not deep-zoom (OpenSeadragon can also open single image via tileSources, but we also show it here)
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedDataset.imageUrl} alt={selectedDataset.title} className="h-full w-full object-contain" />
-                )}
-              </div>
+              <div ref={viewerContainerRef} className="h-[60vh] min-h-[420px] w-full" />
               <div className="absolute z-10 bottom-3 left-3 right-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button
@@ -844,6 +917,9 @@ export default function HomePage() {
                   >
                     <Flag className="h-4 w-4" /> {drawMode ? "Pin On" : "Pin Off"}
                   </button>
+                  {drawMode && (
+                    <span className="text-xs text-white/60">Click the image to place a pin</span>
+                  )}
                 <button
                   disabled
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-sm bg-white/5 opacity-60"

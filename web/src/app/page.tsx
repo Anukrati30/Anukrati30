@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Layers,
   Maximize2,
@@ -80,6 +80,10 @@ type OSDWorld = {
   getItemAt: (index: number) => OSDItem | null;
 };
 
+type OSDLib = {
+  Point: new (x: number, y: number) => unknown;
+};
+
 const SAMPLE_DATASETS: Dataset[] = [
   {
     id: "andromeda-demo",
@@ -152,6 +156,15 @@ type NasaItem = {
 type AnnotationJson = AnnoJsonType;
 type AnnotoriousInstance = AnnoInstanceType;
 
+type PointAnnotation = {
+  id: string;
+  xpct: number; // 0..1
+  ypct: number; // 0..1
+  label: string;
+  createdAt: string;
+  type: "point";
+};
+
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDataset, setSelectedDataset] = useState<Dataset>(
@@ -169,11 +182,24 @@ export default function HomePage() {
   const [newThumbUrl, setNewThumbUrl] = useState("");
   const [newTags, setNewTags] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const [drawMode, setDrawMode] = useState(false);
+  const [drawMode, setDrawMode] = useState(false); // repurposed as Pin mode
   const annoRef = useRef<AnnotoriousInstance | null>(null);
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
+  const osdLibRef = useRef<OSDLib | null>(null);
+  const imageDimsRef = useRef<{ width: number; height: number } | null>(null);
+  const [pointAnnotations, setPointAnnotations] = useState<PointAnnotation[]>([]);
+  const pinElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const [pinPopup, setPinPopup] = useState<{
+    visible: boolean;
+    left: number;
+    top: number;
+    imgX: number;
+    imgY: number;
+    tempLabel: string;
+    editId?: string;
+  }>({ visible: false, left: 0, top: 0, imgX: 0, imgY: 0, tempLabel: "" });
 
   const filteredDatasets = useMemo(() => {
     const all: Array<Dataset | (NasaItem & { dziUrl?: string })> = [
@@ -240,6 +266,7 @@ export default function HomePage() {
       const OpenSeadragon = (await import("openseadragon")).default as unknown as (
         options: OSDOptions
       ) => OSDViewer;
+      osdLibRef.current = (await import("openseadragon")) as unknown as OSDLib;
       const Annotorious = (await import(
         "@recogito/annotorious-openseadragon"
       )) as unknown as (viewer: OSDViewer, config?: Record<string, unknown>) => AnnotoriousInstance;
@@ -270,7 +297,7 @@ export default function HomePage() {
             "https://openseadragon.github.io/example-images/duomo/duomo.dzi"
           );
         });
-        instance.addHandler("open", () => {
+        instance.addHandler("open", async () => {
           setTileError(null);
           // apply AI rewrite when viewer opens
           try {
@@ -285,8 +312,8 @@ export default function HomePage() {
                 "COMMENT",
                 { widget: "TAG", vocabulary: ["crater", "dune", "storm", "plume", "ridge"] },
               ];
-              anno.setDrawingTool?.("polygon");
-              anno.setDrawingEnabled?.(true);
+              // Disable polygon drawing; we use pin-based annotations
+              anno.setDrawingEnabled?.(false);
               anno.on("createAnnotation", async (a: AnnotationJson) => {
                 await fetch("/api/annotations", {
                   method: "POST",
@@ -317,6 +344,57 @@ export default function HomePage() {
               annoRef.current = anno;
             }
           } catch {}
+
+          // Load existing point annotations for this dataset
+          try {
+            const res = await fetch(`/api/annotations?datasetId=${encodeURIComponent(selectedDataset.id)}`);
+            if (res.ok) {
+              const data = (await res.json()) as unknown;
+              const arr = Array.isArray(data) ? (data as unknown[]) : [];
+              const points: PointAnnotation[] = arr.filter((d): d is PointAnnotation => {
+                return (
+                  typeof d === "object" && d !== null &&
+                  (d as { type?: string }).type === "point" &&
+                  typeof (d as { xpct?: unknown }).xpct === "number" &&
+                  typeof (d as { ypct?: unknown }).ypct === "number" &&
+                  typeof (d as { label?: unknown }).label === "string"
+                );
+              });
+              setPointAnnotations(points);
+              // Render pins
+              clearAllPins();
+              points.forEach(addPinOverlay);
+            }
+          } catch {}
+
+          // Add click handler for dropping pins
+          try {
+            (instance as unknown as { addHandler: (ev: string, cb: (e: { position: { x: number; y: number }; preventDefaultAction?: boolean }) => void) => void }).addHandler(
+              "canvas-click",
+              (e) => {
+                if (!drawMode) return;
+                const web = e.position; // pixel coords in viewer element
+                const vp = (instance as unknown as { viewport: { pointFromPixel: (p: { x: number; y: number }) => { x: number; y: number } } }).viewport.pointFromPixel(
+                  web
+                );
+                const item = (instance as unknown as { world: { getItemAt: (i: number) => { viewportToImageCoordinates: (p: { x: number; y: number }) => { x: number; y: number }; source: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } } } } }).world.getItemAt(0);
+                const img = item.viewportToImageCoordinates(vp);
+                const ts: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } } = item.source;
+                const iw = ts.width ?? ts.dimensions?.x ?? ts.dimensions?.width ?? 1;
+                const ih = ts.height ?? ts.dimensions?.y ?? ts.dimensions?.height ?? 1;
+                imageDimsRef.current = { width: iw as number, height: ih as number };
+                setPinPopup({
+                  visible: true,
+                  left: web.x,
+                  top: web.y,
+                  imgX: img.x,
+                  imgY: img.y,
+                  tempLabel: "",
+                });
+                e.preventDefaultAction = true;
+              }
+            );
+          } catch {}
         });
         viewerInstanceRef.current = instance;
       } else {
@@ -327,7 +405,7 @@ export default function HomePage() {
     return () => {
       disposed = true;
     };
-  }, [selectedDataset, aiEnhance]);
+  }, [selectedDataset, aiEnhance, drawMode]);
 
   function applyAiRewrite(viewer: OSDViewer, enabled: boolean) {
     // Access world using unknown casting but keep typed locals to avoid `any`.
@@ -353,10 +431,72 @@ export default function HomePage() {
 
   // Toggle drawing via sidebar Annotate button
   useEffect(() => {
+    // Pin mode handled via viewer click; no polygon drawing
+    // We still ensure annotorious editor is enabled for popup inputs
     if (!annoRef.current) return;
-    annoRef.current.setDrawingEnabled?.(drawMode);
-    if (drawMode) annoRef.current.setDrawingTool?.("polygon");
+    annoRef.current.disableEditor = false;
   }, [drawMode]);
+
+  function clearAllPins() {
+    pinElsRef.current.forEach((el) => el.remove());
+    pinElsRef.current.clear();
+  }
+
+  function imageToPct(x: number, y: number) {
+    const dims = imageDimsRef.current;
+    if (!dims) return { xpct: 0, ypct: 0 };
+    return { xpct: x / dims.width, ypct: y / dims.height };
+  }
+
+  function pctToViewerPixels(xpct: number, ypct: number) {
+    const viewer = viewerInstanceRef.current as unknown as {
+      world: { getItemAt: (i: number) => { imageToViewportCoordinates: (x: number, y: number) => { x: number; y: number } } };
+      viewport: { pixelFromPoint: (pt: { x: number; y: number }) => { x: number; y: number } };
+    };
+    const dims = imageDimsRef.current;
+    if (!viewer || !dims) return { left: 0, top: 0 };
+    const item = viewer.world.getItemAt(0);
+    const imgX = xpct * dims.width;
+    const imgY = ypct * dims.height;
+    const vpPt = item.imageToViewportCoordinates(imgX, imgY);
+    const webPt = viewer.viewport.pixelFromPoint(vpPt);
+    return { left: webPt.x, top: webPt.y };
+  }
+
+  const addPinOverlay = useCallback(function addPinOverlay(p: PointAnnotation) {
+    const container = viewerContainerRef.current;
+    if (!container) return;
+    const { left, top } = pctToViewerPixels(p.xpct, p.ypct);
+    const el = document.createElement("div");
+    el.className = "absolute -translate-x-1/2 -translate-y-full z-20";
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.innerHTML = `<div class="rounded-full bg-fuchsia-500 shadow shadow-fuchsia-500/50 text-white w-6 h-6 grid place-items-center"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\"><path fill=\"currentColor\" d=\"M12 2c3.31 0 6 2.69 6 6 0 4.5-6 14-6 14S6 12.5 6 8c0-3.31 2.69-6 6-6zm0 8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z\"/></svg></div>`;
+    container.appendChild(el);
+    pinElsRef.current.set(p.id, el);
+  }, []);
+
+  async function savePoint(label: string) {
+    if (!imageDimsRef.current) return;
+    const { imgX, imgY } = pinPopup;
+    const { xpct, ypct } = imageToPct(imgX, imgY);
+    const p: PointAnnotation = {
+      id: `pin-${Date.now()}`,
+      xpct,
+      ypct,
+      label,
+      createdAt: new Date().toISOString(),
+      type: "point",
+    };
+    setPointAnnotations((prev) => [...prev, p]);
+    addPinOverlay(p);
+    await fetch("/api/annotations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ datasetId: selectedDataset.id, annotation: p }),
+    });
+    setPinPopup({ ...pinPopup, visible: false, tempLabel: "" });
+  }
 
   function zoomIn() {
     const viewer = viewerInstanceRef.current;
@@ -782,6 +922,38 @@ export default function HomePage() {
               </div>
             )}
           </div>
+          {/* Pin label popup */}
+          {pinPopup.visible && (
+            <div
+              className="absolute z-30"
+              style={{ left: pinPopup.left, top: pinPopup.top }}
+            >
+              <div className="translate-y-2 rounded-2xl border border-white/10 bg-[#0f1022] p-3 w-64 shadow-xl">
+                <div className="text-xs text-white/60 mb-2">Add label</div>
+                <input
+                  autoFocus
+                  value={pinPopup.tempLabel}
+                  onChange={(e) => setPinPopup({ ...pinPopup, tempLabel: e.target.value })}
+                  placeholder="e.g., Dust devil"
+                  className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
+                />
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setPinPopup({ ...pinPopup, visible: false, tempLabel: "" })}
+                    className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => savePoint(pinPopup.tempLabel)}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black text-xs font-semibold"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <aside className="lg:col-span-4 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
               <h3 className="font-semibold tracking-tight">{selectedDataset.title}</h3>

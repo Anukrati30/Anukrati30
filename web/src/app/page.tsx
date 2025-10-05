@@ -865,6 +865,52 @@ export default function HomePage() {
                 </div>
               )}
               <div ref={viewerContainerRef} className="h-[60vh] min-h-[420px] w-full" />
+              {pinPopup.visible && (
+                <div className="absolute z-30" style={{ left: pinPopup.left, top: pinPopup.top }}>
+                  <div className="translate-y-2 rounded-2xl border border-white/10 bg-[#0f1022] p-3 w-64 shadow-xl">
+                    <div className="text-xs text-white/60 mb-2">Add pin label</div>
+                    <input
+                      autoFocus
+                      value={pinPopup.tempLabel}
+                      onChange={(e) => setPinPopup({ ...pinPopup, tempLabel: e.target.value })}
+                      placeholder="e.g., Dust devil"
+                      className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
+                    />
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setPinPopup({ ...pinPopup, visible: false, tempLabel: "" })}
+                        className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const dims = imageDimsRef.current;
+                          if (!dims) return;
+                          const p: PointAnnotation = {
+                            id: `pin-${Date.now()}`,
+                            type: "point",
+                            xpct: pinPopup.xpct,
+                            ypct: pinPopup.ypct,
+                            label: pinPopup.tempLabel || "",
+                            createdAt: new Date().toISOString(),
+                          };
+                          setPointAnnotations((prev) => [...prev, p]);
+                          await fetch("/api/annotations", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ datasetId: selectedDataset.id, annotation: p }),
+                          });
+                          setPinPopup({ ...pinPopup, visible: false, tempLabel: "" });
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black text-xs font-semibold"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="absolute z-10 bottom-3 left-3 right-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button

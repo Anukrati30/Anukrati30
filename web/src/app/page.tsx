@@ -156,6 +156,10 @@ type AnnotoriousInstance = {
     handler: (a: AnnotationJson) => void
   ) => void;
   addAnnotation?: (a: AnnotationJson) => void;
+  setDrawingEnabled?: (enable: boolean) => void;
+  setDrawingTool?: (shape: "rect" | "polygon" | string) => void;
+  cancelSelected?: () => void;
+  widgets?: Array<unknown>;
   destroy?: () => void;
 };
 
@@ -166,7 +170,6 @@ export default function HomePage() {
   const [selectedDataset, setSelectedDataset] = useState<Dataset>(
     SAMPLE_DATASETS[0]
   );
-  // annotations open to all (no login)
   const [nasaItems, setNasaItems] = useState<NasaItem[]>([]);
   const [tileError, setTileError] = useState<string | null>(null);
   const [aiEnhance, setAiEnhance] = useState<boolean>(false);
@@ -180,11 +183,7 @@ export default function HomePage() {
   const [newTags, setNewTags] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [drawMode, setDrawMode] = useState(false);
-  const annoRef = useRef<{
-    activatePolygon?: () => void;
-    cancelDrawing?: () => void;
-    destroy?: () => void;
-  } | null>(null);
+  const annoRef = useRef<AnnotoriousInstance | null>(null);
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
@@ -294,6 +293,13 @@ export default function HomePage() {
             // init annotorious once per viewer creation
             if (!annoRef.current) {
               const anno = new Annotorious({ viewer: instance });
+              // Enable built-in editor with a simple comment + tags field
+              anno.widgets = [
+                "COMMENT",
+                { widget: "TAG", vocabulary: ["crater", "dune", "storm", "plume", "ridge"] },
+              ];
+              anno.setDrawingTool?.("polygon");
+              anno.setDrawingEnabled?.(true);
               anno.on("createAnnotation", async (a: AnnotationJson) => {
                 await fetch("/api/annotations", {
                   method: "POST",
@@ -357,6 +363,13 @@ export default function HomePage() {
       source.getTileUrl = source._getTileUrlOriginal;
     }
   }
+
+  // Toggle drawing via sidebar Annotate button
+  useEffect(() => {
+    if (!annoRef.current) return;
+    annoRef.current.setDrawingEnabled?.(drawMode);
+    if (drawMode) annoRef.current.setDrawingTool?.("polygon");
+  }, [drawMode]);
 
   function zoomIn() {
     const viewer = viewerInstanceRef.current;
@@ -743,7 +756,7 @@ export default function HomePage() {
                     <ZoomIn className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => annoRef.current?.activatePolygon?.()}
+                    onClick={() => annoRef.current?.setDrawingTool?.("polygon")}
                     className={`h-9 px-3 inline-flex items-center gap-2 rounded-xl border text-sm ${
                       drawMode
                         ? "bg-gradient-to-r from-emerald-500 to-cyan-400 text-black border-white/20"
@@ -818,7 +831,7 @@ export default function HomePage() {
                 </button>
                   {drawMode && (
                     <button
-                      onClick={() => annoRef.current?.cancelDrawing?.()}
+                      onClick={() => annoRef.current?.cancelSelected?.()}
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm bg-white/5 hover:bg-white/10 border-white/10"
                     >
                       Cancel draw

@@ -18,17 +18,15 @@ import {
   Link as LinkIcon,
   Flag,
 } from "lucide-react";
-import type {
-  AnnotoriousInstance as AnnoInstanceType,
-  AnnotationJson as AnnoJsonType,
-} from "@recogito/annotorious-openseadragon";
+// (Annotorious removed for simple text notes)
 
 type Dataset = {
   id: string;
   title: string;
   description: string;
   category: string;
-  dziUrl: string;
+  dziUrl: string; // DZI/IIIF URL or empty for uploaded images
+  imageUrl?: string; // For uploaded JPG/PNG/JPEG
   thumbnailUrl: string;
   tags: string[];
 };
@@ -41,7 +39,7 @@ type OSDViewport = {
 type OSDViewer = {
   viewport: OSDViewport;
   setFullScreen: (flag: boolean) => void;
-  open: (tileSource: string) => void;
+  open: (tileSource: string | { type: "image"; url: string }) => void;
   addHandler: (eventName: string, handler: (event: unknown) => void) => void;
 };
 
@@ -63,7 +61,7 @@ type OSDOptions = {
   visibilityRatio?: number;
   constrainDuringPan?: boolean;
   gestureSettingsMouse?: OSDGestureSettings;
-  tileSources: string;
+  tileSources: string | { type: "image"; url: string };
 };
 
 type OSDTileSource = {
@@ -81,9 +79,7 @@ type OSDWorld = {
   getItemAt: (index: number) => OSDItem | null;
 };
 
-type OSDLib = {
-  Point: new (x: number, y: number) => unknown;
-};
+//
 
 const SAMPLE_DATASETS: Dataset[] = [
   {
@@ -154,17 +150,7 @@ type NasaItem = {
   tags: string[];
 };
 
-type AnnotationJson = AnnoJsonType;
-type AnnotoriousInstance = AnnoInstanceType;
-
-type PointAnnotation = {
-  id: string;
-  xpct: number; // 0..1
-  ypct: number; // 0..1
-  label: string;
-  createdAt: string;
-  type: "point";
-};
+type Note = { id: string; type: "note"; text: string; createdAt: string };
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -183,24 +169,13 @@ export default function HomePage() {
   const [newThumbUrl, setNewThumbUrl] = useState("");
   const [newTags, setNewTags] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const [drawMode, setDrawMode] = useState(false); // repurposed as Pin mode
-  const annoRef = useRef<AnnotoriousInstance | null>(null);
+  const [drawMode, setDrawMode] = useState(false); // unused in notes mode
+  // simple notes (no drawing)
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
-  const osdLibRef = useRef<OSDLib | null>(null);
-  const imageDimsRef = useRef<{ width: number; height: number } | null>(null);
-  const [pointAnnotations, setPointAnnotations] = useState<PointAnnotation[]>([]);
-  const pinElsRef = useRef<Map<string, HTMLElement>>(new Map());
-  const [pinPopup, setPinPopup] = useState<{
-    visible: boolean;
-    left: number;
-    top: number;
-    imgX: number;
-    imgY: number;
-    tempLabel: string;
-    editId?: string;
-  }>({ visible: false, left: 0, top: 0, imgX: 0, imgY: 0, tempLabel: "" });
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [noteText, setNoteText] = useState("");
 
   const filteredDatasets = useMemo(() => {
     const all: Array<Dataset | (NasaItem & { dziUrl?: string })> = [
@@ -267,10 +242,7 @@ export default function HomePage() {
       const OpenSeadragon = (await import("openseadragon")).default as unknown as (
         options: OSDOptions
       ) => OSDViewer;
-      osdLibRef.current = (await import("openseadragon")) as unknown as OSDLib;
-      const Annotorious = (await import(
-        "@recogito/annotorious-openseadragon"
-      )) as unknown as (viewer: OSDViewer, config?: Record<string, unknown>) => AnnotoriousInstance;
+      // no annotorious in simple note mode
       if (disposed) return;
       if (!viewerInstanceRef.current) {
         const instance = OpenSeadragon({
@@ -304,97 +276,21 @@ export default function HomePage() {
           try {
             applyAiRewrite(instance, aiEnhance);
           } catch {}
-          try {
-            // init annotorious once per viewer creation
-            if (!annoRef.current) {
-              const anno = Annotorious(instance as unknown as OSDViewer, {});
-              // Enable built-in editor with a simple comment + tags field
-              anno.widgets = [
-                "COMMENT",
-                { widget: "TAG", vocabulary: ["crater", "dune", "storm", "plume", "ridge"] },
-              ];
-              // Disable polygon drawing; we use pin-based annotations
-              anno.setDrawingEnabled?.(false);
-              anno.on("createAnnotation", async (a: AnnotationJson) => {
-                await fetch("/api/annotations", {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({
-                    datasetId: selectedDataset.id,
-                    annotation: a,
-                  }),
-                });
-              });
-              anno.on("updateAnnotation", async (a: AnnotationJson) => {
-                await fetch("/api/annotations", {
-                  method: "PUT",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({
-                    datasetId: selectedDataset.id,
-                    annotation: a,
-                  }),
-                });
-              });
-              anno.on("deleteAnnotation", async (a: AnnotationJson) => {
-                await fetch(`/api/annotations?datasetId=${encodeURIComponent(selectedDataset.id)}`, {
-                  method: "DELETE",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ id: a?.id }),
-                });
-              });
-              annoRef.current = anno;
-            }
-          } catch {}
-
-          // Load existing point annotations for this dataset
+          // Load existing notes for this dataset
           try {
             const res = await fetch(`/api/annotations?datasetId=${encodeURIComponent(selectedDataset.id)}`);
             if (res.ok) {
               const data = (await res.json()) as unknown;
               const arr = Array.isArray(data) ? (data as unknown[]) : [];
-              const points: PointAnnotation[] = arr.filter((d): d is PointAnnotation => {
+              const allNotes: Note[] = arr.filter((d): d is Note => {
                 return (
                   typeof d === "object" && d !== null &&
-                  (d as { type?: string }).type === "point" &&
-                  typeof (d as { xpct?: unknown }).xpct === "number" &&
-                  typeof (d as { ypct?: unknown }).ypct === "number" &&
-                  typeof (d as { label?: unknown }).label === "string"
+                  (d as { type?: string }).type === "note" &&
+                  typeof (d as { text?: unknown }).text === "string"
                 );
               });
-              setPointAnnotations(points);
-              // Render pins
-              clearAllPins();
-              points.forEach(addPinOverlay);
+              setNotes(allNotes);
             }
-          } catch {}
-
-          // Add click handler for dropping pins
-          try {
-            (instance as unknown as { addHandler: (ev: string, cb: (e: { position: { x: number; y: number }; preventDefaultAction?: boolean }) => void) => void }).addHandler(
-              "canvas-click",
-              (e) => {
-                if (!drawMode) return;
-                const web = e.position; // pixel coords in viewer element
-                const vp = (instance as unknown as { viewport: { pointFromPixel: (p: { x: number; y: number }) => { x: number; y: number } } }).viewport.pointFromPixel(
-                  web
-                );
-                const item = (instance as unknown as { world: { getItemAt: (i: number) => { viewportToImageCoordinates: (p: { x: number; y: number }) => { x: number; y: number }; source: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } } } } }).world.getItemAt(0);
-                const img = item.viewportToImageCoordinates(vp);
-                const ts: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } } = item.source;
-                const iw = ts.width ?? ts.dimensions?.x ?? ts.dimensions?.width ?? 1;
-                const ih = ts.height ?? ts.dimensions?.y ?? ts.dimensions?.height ?? 1;
-                imageDimsRef.current = { width: iw as number, height: ih as number };
-                setPinPopup({
-                  visible: true,
-                  left: web.x,
-                  top: web.y,
-                  imgX: img.x,
-                  imgY: img.y,
-                  tempLabel: "",
-                });
-                e.preventDefaultAction = true;
-              }
-            );
           } catch {}
         });
         viewerInstanceRef.current = instance;
@@ -430,73 +326,25 @@ export default function HomePage() {
     }
   }
 
-  // Toggle drawing via sidebar Annotate button
-  useEffect(() => {
-    // Pin mode handled via viewer click; no polygon drawing
-    // We still ensure annotorious editor is enabled for popup inputs
-    if (!annoRef.current) return;
-    annoRef.current.disableEditor = false;
-  }, [drawMode]);
+  // No drawing/editor in simple notes mode
 
-  function clearAllPins() {
-    pinElsRef.current.forEach((el) => el.remove());
-    pinElsRef.current.clear();
-  }
+  // pin overlay removed
 
-  function imageToPct(x: number, y: number) {
-    const dims = imageDimsRef.current;
-    if (!dims) return { xpct: 0, ypct: 0 };
-    return { xpct: x / dims.width, ypct: y / dims.height };
-  }
-
-  function pctToViewerPixels(xpct: number, ypct: number) {
-    const viewer = viewerInstanceRef.current as unknown as {
-      world: { getItemAt: (i: number) => { imageToViewportCoordinates: (x: number, y: number) => { x: number; y: number } } };
-      viewport: { pixelFromPoint: (pt: { x: number; y: number }) => { x: number; y: number } };
-    };
-    const dims = imageDimsRef.current;
-    if (!viewer || !dims) return { left: 0, top: 0 };
-    const item = viewer.world.getItemAt(0);
-    const imgX = xpct * dims.width;
-    const imgY = ypct * dims.height;
-    const vpPt = item.imageToViewportCoordinates(imgX, imgY);
-    const webPt = viewer.viewport.pixelFromPoint(vpPt);
-    return { left: webPt.x, top: webPt.y };
-  }
-
-  const addPinOverlay = useCallback(function addPinOverlay(p: PointAnnotation) {
-    const container = viewerContainerRef.current;
-    if (!container) return;
-    const { left, top } = pctToViewerPixels(p.xpct, p.ypct);
-    const el = document.createElement("div");
-    el.className = "absolute -translate-x-1/2 -translate-y-full z-20";
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.innerHTML = `<div class="rounded-full bg-fuchsia-500 shadow shadow-fuchsia-500/50 text-white w-6 h-6 grid place-items-center"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\"><path fill=\"currentColor\" d=\"M12 2c3.31 0 6 2.69 6 6 0 4.5-6 14-6 14S6 12.5 6 8c0-3.31 2.69-6 6-6zm0 8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z\"/></svg></div>`;
-    container.appendChild(el);
-    pinElsRef.current.set(p.id, el);
-  }, []);
-
-  async function savePoint(label: string) {
-    if (!imageDimsRef.current) return;
-    const { imgX, imgY } = pinPopup;
-    const { xpct, ypct } = imageToPct(imgX, imgY);
-    const p: PointAnnotation = {
-      id: `pin-${Date.now()}`,
-      xpct,
-      ypct,
-      label,
+  // simple notes save
+  async function saveNote(text: string) {
+    const n: Note = {
+      id: `note-${Date.now()}`,
+      type: "note",
+      text,
       createdAt: new Date().toISOString(),
-      type: "point",
     };
-    setPointAnnotations((prev) => [...prev, p]);
-    addPinOverlay(p);
+    setNotes((prev) => [n, ...prev]);
     await fetch("/api/annotations", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ datasetId: selectedDataset.id, annotation: p }),
+      body: JSON.stringify({ datasetId: selectedDataset.id, annotation: n }),
     });
-    setPinPopup({ ...pinPopup, visible: false, tempLabel: "" });
+    setNoteText("");
   }
 
   function zoomIn() {
@@ -660,6 +508,37 @@ export default function HomePage() {
           <span className="text-xs text-white/50">
             Paste a DZI or IIIF Image/Manifest URL
           </span>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const input = e.currentTarget.elements.namedItem("file") as HTMLInputElement;
+              if (!input.files || !input.files[0]) return;
+              const form = new FormData();
+              form.append("file", input.files[0]);
+              const res = await fetch("/api/upload", { method: "POST", body: form });
+              if (!res.ok) return;
+              const { url } = (await res.json()) as { url: string };
+              const ds: Dataset = {
+                id: `upload-${Date.now()}`,
+                title: input.files[0].name,
+                description: "Uploaded image",
+                category: "Upload",
+                dziUrl: "",
+                imageUrl: url,
+                thumbnailUrl: url,
+                tags: ["upload"],
+              };
+              setCustomDatasets((prev) => [ds, ...prev]);
+              setSelectedDataset(ds);
+              input.value = "";
+            }}
+            className="inline-flex items-center gap-2"
+          >
+            <input name="file" type="file" accept="image/jpeg,image/png,image/jpg" className="text-xs" />
+            <button type="submit" className="text-xs px-2 py-1 rounded-full bg-white/5 border border-white/10">
+              Upload
+            </button>
+          </form>
         </div>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredDatasets.map((d) => (
@@ -863,10 +742,13 @@ export default function HomePage() {
                   {tileError}
                 </div>
               )}
-              <div
-                ref={viewerContainerRef}
-                className="h-[60vh] min-h-[420px] w-full"
-              />
+              <div ref={viewerContainerRef} className="h-[60vh] min-h-[420px] w-full">
+                {selectedDataset.imageUrl && (
+                  // fallback plain image if not deep-zoom (OpenSeadragon can also open single image via tileSources, but we also show it here)
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={selectedDataset.imageUrl} alt={selectedDataset.title} className="h-full w-full object-contain" />
+                )}
+              </div>
               <div className="absolute z-10 bottom-3 left-3 right-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button
@@ -917,44 +799,11 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-            {selectedDataset.dziUrl === "" && (
-              <div className="mt-3 text-xs text-white/60">
-                This NASA APOD item is not a deep-zoom tile source, displaying thumbnail instead.
-              </div>
+            {selectedDataset.dziUrl === "" && !selectedDataset.imageUrl && (
+              <div className="mt-3 text-xs text-white/60">No deep-zoom source. Upload an image or select a DZI/IIIF dataset.</div>
             )}
           </div>
-          {/* Pin label popup */}
-          {pinPopup.visible && (
-            <div
-              className="absolute z-30"
-              style={{ left: pinPopup.left, top: pinPopup.top }}
-            >
-              <div className="translate-y-2 rounded-2xl border border-white/10 bg-[#0f1022] p-3 w-64 shadow-xl">
-                <div className="text-xs text-white/60 mb-2">Add label</div>
-                <input
-                  autoFocus
-                  value={pinPopup.tempLabel}
-                  onChange={(e) => setPinPopup({ ...pinPopup, tempLabel: e.target.value })}
-                  placeholder="e.g., Dust devil"
-                  className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
-                />
-                <div className="mt-2 flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setPinPopup({ ...pinPopup, visible: false, tempLabel: "" })}
-                    className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => savePoint(pinPopup.tempLabel)}
-                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black text-xs font-semibold"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* No pin popup in simple notes mode */}
           <aside className="lg:col-span-4 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
               <h3 className="font-semibold tracking-tight">{selectedDataset.title}</h3>
@@ -1004,9 +853,32 @@ export default function HomePage() {
                   <Eye className="h-4 w-4" /> Compare
                 </button>
               </div>
+                <div className="pt-3 border-t border-white/10">
+                  <div className="text-sm font-semibold mb-2">Notes</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Type a note/label..."
+                      className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
+                    />
+                    <button
+                      onClick={() => noteText.trim() && saveNote(noteText.trim())}
+                      className="px-3 py-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black text-sm font-semibold"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <ul className="mt-3 space-y-2 max-h-48 overflow-auto pr-1">
+                    {notes.map((n) => (
+                      <li key={n.id} className="text-xs text-white/80 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                        {n.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               <p className="text-xs text-white/50">
-                Annotations require an account. Your labels are saved to your profile and
-                can be shared with your team.
+                  Notes are saved locally per dataset.
               </p>
             </div>
           </aside>

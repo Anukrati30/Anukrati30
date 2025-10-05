@@ -261,7 +261,9 @@ export default function HomePage() {
             pinchToZoom: true,
             scrollToZoom: true,
           },
-          tileSources: selectedDataset.dziUrl,
+          tileSources: selectedDataset.imageUrl
+            ? { type: "image", url: selectedDataset.imageUrl }
+            : selectedDataset.dziUrl,
         });
         // Fallback handler in case tile source fails
         instance.addHandler("open-failed", () => {
@@ -295,7 +297,11 @@ export default function HomePage() {
         });
         viewerInstanceRef.current = instance;
       } else {
-        viewerInstanceRef.current.open(selectedDataset.dziUrl);
+        viewerInstanceRef.current.open(
+          selectedDataset.imageUrl
+            ? { type: "image", url: selectedDataset.imageUrl }
+            : selectedDataset.dziUrl
+        );
       }
     }
     ensureViewer();

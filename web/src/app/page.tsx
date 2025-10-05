@@ -324,6 +324,28 @@ export default function HomePage() {
               // Prepare for pin overlay rendering after dimensions known
             }
           } catch {}
+
+          // Enable placing pins on click when pin mode is on
+          try {
+            (instance as unknown as { addHandler: (ev: string, cb: (e: { position: { x: number; y: number }; preventDefaultAction?: boolean }) => void) => void }).addHandler(
+              "canvas-click",
+              (e) => {
+                if (!drawMode) return;
+                const web = e.position;
+                const vp = (instance as unknown as { viewport: { pointFromPixel: (p: { x: number; y: number }) => { x: number; y: number } } }).viewport.pointFromPixel(web);
+                const item = (instance as unknown as { world: { getItemAt: (i: number) => { viewportToImageCoordinates: (p: { x: number; y: number }) => { x: number; y: number }; source: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } } } } }).world.getItemAt(0);
+                const img = item.viewportToImageCoordinates(vp);
+                const ts = item.source;
+                const iw = ts.width ?? ts.dimensions?.x ?? ts.dimensions?.width ?? 1;
+                const ih = ts.height ?? ts.dimensions?.y ?? ts.dimensions?.height ?? 1;
+                imageDimsRef.current = { width: iw, height: ih };
+                const xpct = img.x / iw;
+                const ypct = img.y / ih;
+                setPinPopup({ visible: true, left: web.x, top: web.y, xpct, ypct, tempLabel: "" });
+                e.preventDefaultAction = true;
+              }
+            );
+          } catch {}
         });
         viewerInstanceRef.current = instance;
       } else {
@@ -882,7 +904,53 @@ export default function HomePage() {
               <div className="mt-3 text-xs text-white/60">No deep-zoom source. Upload an image or select a DZI/IIIF dataset.</div>
             )}
           </div>
-          {/* No pin popup in simple notes mode */}
+          {/* Pin popup for labeling specific regions */}
+          {pinPopup.visible && (
+            <div className="absolute z-30" style={{ left: pinPopup.left, top: pinPopup.top }}>
+              <div className="translate-y-2 rounded-2xl border border-white/10 bg-[#0f1022] p-3 w-64 shadow-xl">
+                <div className="text-xs text-white/60 mb-2">Add pin label</div>
+                <input
+                  autoFocus
+                  value={pinPopup.tempLabel}
+                  onChange={(e) => setPinPopup({ ...pinPopup, tempLabel: e.target.value })}
+                  placeholder="e.g., Dust devil"
+                  className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
+                />
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setPinPopup({ ...pinPopup, visible: false, tempLabel: "" })}
+                    className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const dims = imageDimsRef.current;
+                      if (!dims) return;
+                      const p: PointAnnotation = {
+                        id: `pin-${Date.now()}`,
+                        type: "point",
+                        xpct: pinPopup.xpct,
+                        ypct: pinPopup.ypct,
+                        label: pinPopup.tempLabel || "",
+                        createdAt: new Date().toISOString(),
+                      };
+                      setPointAnnotations((prev) => [...prev, p]);
+                      await fetch("/api/annotations", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ datasetId: selectedDataset.id, annotation: p }),
+                      });
+                      setPinPopup({ ...pinPopup, visible: false, tempLabel: "" });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-black text-xs font-semibold"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <aside className="lg:col-span-4 space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
               <h3 className="font-semibold tracking-tight">{selectedDataset.title}</h3>

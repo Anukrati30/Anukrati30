@@ -84,59 +84,23 @@ type OSDWorld = {
 const SAMPLE_DATASETS: Dataset[] = [
   {
     id: "andromeda-demo",
-    title: "Andromeda Galaxy (Demo Tiles)",
-    description:
-      "Zoom into a gigapixel-scale galaxy sample. Demonstrates deep zoom fluidity.",
+    title: "Andromeda Galaxy (JPG)",
+    description: "Single-image zoom.",
     category: "Galaxy",
-    dziUrl:
-      "https://openseadragon.github.io/example-images/highsmith/highsmith.dzi",
-    thumbnailUrl:
-      "https://openseadragon.github.io/example-images/highsmith/highsmith_files/10/0_0.jpg",
+    dziUrl: "",
+    imageUrl: "/images/stellar.jpg", // place in public/images/stellar.jpg
+    thumbnailUrl: "/images/stellar.jpg",
     tags: ["galaxy", "stars", "deep field"],
   },
   {
-    id: "moon-demo",
-    title: "Lunar Highlands (Demo Tiles)",
-    description:
-      "Explore moon-like detail with a sample tiling source. Great for craters.",
-    category: "Moon",
-    dziUrl: "https://openseadragon.github.io/example-images/duomo/duomo.dzi",
-    thumbnailUrl:
-      "https://openseadragon.github.io/example-images/duomo/duomo_files/10/0_0.jpg",
-    tags: ["moon", "craters", "lunar"],
-  },
-  {
     id: "mars-demo",
-    title: "Mars Dune Fields (Demo Tiles)",
-    description:
-      "Pan across patterns reminiscent of martian dunes using demo tiles.",
+    title: "Mars Dune Fields (JPG)",
+    description: "Single-image zoom.",
     category: "Mars",
-    dziUrl: "https://openseadragon.github.io/example-images/highsmith/highsmith.dzi",
-    thumbnailUrl:
-      "https://openseadragon.github.io/example-images/highsmith/highsmith_files/10/0_0.jpg",
+    dziUrl: "",
+    imageUrl: "/images/mars.jpg", // place in public/images/mars.jpg
+    thumbnailUrl: "/images/mars.jpg",
     tags: ["mars", "dunes", "patterns"],
-  },
-  {
-    id: "earth-demo",
-    title: "Earth Swirls (Demo Tiles)",
-    description:
-      "Aesthetic swirls stand in for high-res Earth observation imagery.",
-    category: "Earth",
-    dziUrl: "https://openseadragon.github.io/example-images/nga/nga.dzi",
-    thumbnailUrl:
-      "https://openseadragon.github.io/example-images/nga/nga_files/10/0_0.jpg",
-    tags: ["earth", "ocean", "clouds"],
-  },
-  {
-    id: "nebula-demo",
-    title: "Colorful Nebula (Demo Tiles)",
-    description:
-      "A vibrant target to showcase color channels and contrast in zoom.",
-    category: "Deep Space",
-    dziUrl: "https://openseadragon.github.io/example-images/iod/iod.dzi",
-    thumbnailUrl:
-      "https://openseadragon.github.io/example-images/iod/iod_files/10/0_0.jpg",
-    tags: ["nebula", "gas", "clouds"],
   },
 ];
 

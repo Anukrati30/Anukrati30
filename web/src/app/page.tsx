@@ -16,6 +16,7 @@ import {
   X,
   Tag as TagIcon,
   Link as LinkIcon,
+  Flag,
 } from "lucide-react";
 import type {
   AnnotoriousInstance as AnnoInstanceType,
@@ -883,15 +884,15 @@ export default function HomePage() {
                     <ZoomIn className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => annoRef.current?.setDrawingTool?.("polygon")}
+                    onClick={() => setDrawMode((v) => !v)}
                     className={`h-9 px-3 inline-flex items-center gap-2 rounded-xl border text-sm ${
                       drawMode
                         ? "bg-gradient-to-r from-emerald-500 to-cyan-400 text-black border-white/20"
                         : "bg-white/10 hover:bg-white/15 border-white/10"
                     }`}
-                    title="Draw polygon"
+                    title="Toggle pin mode (click to place flag)"
                   >
-                    <Pencil className="h-4 w-4" /> Draw
+                    <Flag className="h-4 w-4" /> {drawMode ? "Pin On" : "Pin Off"}
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -977,25 +978,17 @@ export default function HomePage() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-3">
               <h4 className="font-semibold tracking-tight">Actions</h4>
               <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setDrawMode((v) => !v)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm ${
-                    drawMode
-                      ? "bg-gradient-to-r from-emerald-500 to-cyan-400 text-black border-white/20"
-                      : "bg-white/5 hover:bg-white/10 border-white/10"
-                  }`}
-                  title="Toggle draw mode"
-                >
-                  <Pencil className="h-4 w-4" /> {drawMode ? "Drawing…" : "Annotate"}
-                </button>
-                  {drawMode && (
-                    <button
-                      onClick={() => annoRef.current?.cancelSelected?.()}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm bg-white/5 hover:bg-white/10 border-white/10"
-                    >
-                      Cancel draw
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setDrawMode((v) => !v)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm ${
+                      drawMode
+                        ? "bg-gradient-to-r from-emerald-500 to-cyan-400 text-black border-white/20"
+                        : "bg-white/5 hover:bg-white/10 border-white/10"
+                    }`}
+                    title="Toggle pin mode"
+                  >
+                    <Flag className="h-4 w-4" /> {drawMode ? "Pin On" : "Pin Off"}
+                  </button>
                 <button
                   disabled
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-sm bg-white/5 opacity-60"

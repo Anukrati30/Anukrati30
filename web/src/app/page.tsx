@@ -382,6 +382,21 @@ export default function HomePage() {
     (viewer as unknown as { addHandler: (e: string, cb: () => void) => void }).addHandler("animation-finish", onAnim);
   }, [pointAnnotations]);
 
+  // While pin mode is on, disable click-to-zoom so clicks place pins
+  useEffect(() => {
+    const viewer = viewerInstanceRef.current as unknown as {
+      gestureSettingsMouse?: { clickToZoom?: boolean; dblClickToZoom?: boolean };
+    } | null;
+    if (!viewer || !viewer.gestureSettingsMouse) return;
+    if (drawMode) {
+      viewer.gestureSettingsMouse.clickToZoom = false;
+      viewer.gestureSettingsMouse.dblClickToZoom = false;
+    } else {
+      viewer.gestureSettingsMouse.clickToZoom = true;
+      viewer.gestureSettingsMouse.dblClickToZoom = true;
+    }
+  }, [drawMode]);
+
   function applyAiRewrite(viewer: OSDViewer, enabled: boolean) {
     // Access world using unknown casting but keep typed locals to avoid `any`.
     const world = (viewer as unknown as { world?: OSDWorld }).world;

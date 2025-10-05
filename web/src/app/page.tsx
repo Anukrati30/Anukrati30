@@ -465,7 +465,17 @@ export default function HomePage() {
       el.className = "absolute -translate-x-1/2 -translate-y-full z-20";
       el.style.left = `${web.x}px`;
       el.style.top = `${web.y}px`;
-      el.innerHTML = `<div class=\"rounded-full bg-fuchsia-500 shadow shadow-fuchsia-500/50 text-white w-6 h-6 grid place-items-center\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\"><path fill=\"currentColor\" d=\"M12 2c3.31 0 6 2.69 6 6 0 4.5-6 14-6 14S6 12.5 6 8c0-3.31 2.69-6 6-6zm0 8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z\"/></svg></div>`;
+      el.title = p.label;
+      const dot = document.createElement("div");
+      dot.className = "rounded-full bg-fuchsia-500 shadow shadow-fuchsia-500/50 text-white w-6 h-6 grid place-items-center";
+      dot.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2c3.31 0 6 2.69 6 6 0 4.5-6 14-6 14S6 12.5 6 8c0-3.31 2.69-6 6-6zm0 8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg>';
+      const label = document.createElement("div");
+      label.textContent = p.label;
+      label.className = "absolute left-1/2 -translate-x-1/2 -translate-y-2 mt-1 px-2 py-1 rounded bg-black/70 text-white text-[10px] opacity-0 pointer-events-none whitespace-nowrap";
+      el.appendChild(dot);
+      el.appendChild(label);
+      el.addEventListener("mouseenter", () => (label.style.opacity = "1"));
+      el.addEventListener("mouseleave", () => (label.style.opacity = "0"));
       viewerContainerRef.current?.appendChild(el);
       pinElsRef.current.set(p.id, el);
     }

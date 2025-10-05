@@ -17,6 +17,10 @@ import {
   Tag as TagIcon,
   Link as LinkIcon,
 } from "lucide-react";
+import type {
+  AnnotoriousInstance as AnnoInstanceType,
+  AnnotationJson as AnnoJsonType,
+} from "@recogito/annotorious-openseadragon";
 
 type Dataset = {
   id: string;
@@ -145,25 +149,8 @@ type NasaItem = {
   tags: string[];
 };
 
-type AnnotationJson = { id?: string } & Record<string, unknown>;
-
-type AnnotoriousInstance = {
-  on: (
-    event:
-      | "createAnnotation"
-      | "updateAnnotation"
-      | "deleteAnnotation",
-    handler: (a: AnnotationJson) => void
-  ) => void;
-  addAnnotation?: (a: AnnotationJson) => void;
-  setDrawingEnabled?: (enable: boolean) => void;
-  setDrawingTool?: (shape: "rect" | "polygon" | string) => void;
-  cancelSelected?: () => void;
-  widgets?: Array<unknown>;
-  destroy?: () => void;
-};
-
-type AnnotoriousCtor = new (opts: { viewer: OSDViewer }) => AnnotoriousInstance;
+type AnnotationJson = AnnoJsonType;
+type AnnotoriousInstance = AnnoInstanceType;
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -253,9 +240,9 @@ export default function HomePage() {
       const OpenSeadragon = (await import("openseadragon")).default as unknown as (
         options: OSDOptions
       ) => OSDViewer;
-      const { default: Annotorious } = (await import(
+      const Annotorious = (await import(
         "@recogito/annotorious-openseadragon"
-      )) as { default: AnnotoriousCtor };
+      )) as unknown as (viewer: OSDViewer, config?: Record<string, unknown>) => AnnotoriousInstance;
       if (disposed) return;
       if (!viewerInstanceRef.current) {
         const instance = OpenSeadragon({
@@ -292,7 +279,7 @@ export default function HomePage() {
           try {
             // init annotorious once per viewer creation
             if (!annoRef.current) {
-              const anno = new Annotorious({ viewer: instance });
+              const anno = Annotorious(instance as unknown as OSDViewer, {});
               // Enable built-in editor with a simple comment + tags field
               anno.widgets = [
                 "COMMENT",

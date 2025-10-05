@@ -184,6 +184,7 @@ export default function HomePage() {
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteText, setNoteText] = useState("");
+  const drawModeRef = useRef<boolean>(false);
   const imageDimsRef = useRef<{ width: number; height: number } | null>(null);
   const [pointAnnotations, setPointAnnotations] = useState<PointAnnotation[]>([]);
   const pinElsRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -330,7 +331,7 @@ export default function HomePage() {
             (instance as unknown as { addHandler: (ev: string, cb: (e: { position: { x: number; y: number }; preventDefaultAction?: boolean }) => void) => void }).addHandler(
               "canvas-click",
               (e) => {
-                if (!drawMode) return;
+                if (!drawModeRef.current) return;
                 const web = e.position;
                 const vp = (instance as unknown as { viewport: { pointFromPixel: (p: { x: number; y: number }) => { x: number; y: number } } }).viewport.pointFromPixel(web);
                 const item = (instance as unknown as { world: { getItemAt: (i: number) => { viewportToImageCoordinates: (p: { x: number; y: number }) => { x: number; y: number }; source: { width?: number; height?: number; dimensions?: { x?: number; y?: number; width?: number; height?: number } } } } }).world.getItemAt(0);
@@ -395,6 +396,7 @@ export default function HomePage() {
       viewer.gestureSettingsMouse.clickToZoom = true;
       viewer.gestureSettingsMouse.dblClickToZoom = true;
     }
+    drawModeRef.current = drawMode;
   }, [drawMode]);
 
   function applyAiRewrite(viewer: OSDViewer, enabled: boolean) {

@@ -3,14 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Layers,
-  LogIn,
   Maximize2,
   Pencil,
   ScanSearch,
   Search,
   Sparkles,
   Telescope,
-  UserPlus,
   ZoomIn,
   ZoomOut,
   Eye,
@@ -147,12 +145,28 @@ type NasaItem = {
   tags: string[];
 };
 
+type AnnotationJson = { id?: string } & Record<string, unknown>;
+
+type AnnotoriousInstance = {
+  on: (
+    event:
+      | "createAnnotation"
+      | "updateAnnotation"
+      | "deleteAnnotation",
+    handler: (a: AnnotationJson) => void
+  ) => void;
+  addAnnotation?: (a: AnnotationJson) => void;
+  destroy?: () => void;
+};
+
+type AnnotoriousCtor = new (opts: { viewer: OSDViewer }) => AnnotoriousInstance;
+
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDataset, setSelectedDataset] = useState<Dataset>(
     SAMPLE_DATASETS[0]
   );
-  const [isLoggedIn] = useState(false); // placeholder until auth is wired
+  // annotations open to all (no login)
   const [nasaItems, setNasaItems] = useState<NasaItem[]>([]);
   const [tileError, setTileError] = useState<string | null>(null);
   const [aiEnhance, setAiEnhance] = useState<boolean>(false);
@@ -165,6 +179,12 @@ export default function HomePage() {
   const [newThumbUrl, setNewThumbUrl] = useState("");
   const [newTags, setNewTags] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [drawMode, setDrawMode] = useState(false);
+  const annoRef = useRef<{
+    activatePolygon?: () => void;
+    cancelDrawing?: () => void;
+    destroy?: () => void;
+  } | null>(null);
 
   const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerInstanceRef = useRef<OSDViewer | null>(null);
@@ -234,6 +254,9 @@ export default function HomePage() {
       const OpenSeadragon = (await import("openseadragon")).default as unknown as (
         options: OSDOptions
       ) => OSDViewer;
+      const { default: Annotorious } = (await import(
+        "@recogito/annotorious-openseadragon"
+      )) as { default: AnnotoriousCtor };
       if (disposed) return;
       if (!viewerInstanceRef.current) {
         const instance = OpenSeadragon({
@@ -266,6 +289,40 @@ export default function HomePage() {
           // apply AI rewrite when viewer opens
           try {
             applyAiRewrite(instance, aiEnhance);
+          } catch {}
+          try {
+            // init annotorious once per viewer creation
+            if (!annoRef.current) {
+              const anno = new Annotorious({ viewer: instance });
+              anno.on("createAnnotation", async (a: AnnotationJson) => {
+                await fetch("/api/annotations", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    datasetId: selectedDataset.id,
+                    annotation: a,
+                  }),
+                });
+              });
+              anno.on("updateAnnotation", async (a: AnnotationJson) => {
+                await fetch("/api/annotations", {
+                  method: "PUT",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    datasetId: selectedDataset.id,
+                    annotation: a,
+                  }),
+                });
+              });
+              anno.on("deleteAnnotation", async (a: AnnotationJson) => {
+                await fetch(`/api/annotations?datasetId=${encodeURIComponent(selectedDataset.id)}`, {
+                  method: "DELETE",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ id: a?.id }),
+                });
+              });
+              annoRef.current = anno;
+            }
           } catch {}
         });
         viewerInstanceRef.current = instance;
@@ -355,14 +412,7 @@ export default function HomePage() {
             </button>
           </form>
 
-          <div className="flex items-center gap-2">
-            <button className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm">
-              <LogIn className="h-4 w-4" /> Login
-            </button>
-            <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-cyan-400 hover:brightness-110 text-black text-sm font-semibold shadow-[0_0_0_2px_rgba(255,255,255,0.2)]">
-              <UserPlus className="h-4 w-4" /> Register
-            </button>
-          </div>
+          <div className="flex items-center gap-2" />
         </div>
       </header>
 
@@ -692,6 +742,17 @@ export default function HomePage() {
                   >
                     <ZoomIn className="h-4 w-4" />
                   </button>
+                  <button
+                    onClick={() => annoRef.current?.activatePolygon?.()}
+                    className={`h-9 px-3 inline-flex items-center gap-2 rounded-xl border text-sm ${
+                      drawMode
+                        ? "bg-gradient-to-r from-emerald-500 to-cyan-400 text-black border-white/20"
+                        : "bg-white/10 hover:bg-white/15 border-white/10"
+                    }`}
+                    title="Draw polygon"
+                  >
+                    <Pencil className="h-4 w-4" /> Draw
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -741,16 +802,28 @@ export default function HomePage() {
                 </div>
               )}
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-3">
               <h4 className="font-semibold tracking-tight">Actions</h4>
               <div className="flex flex-wrap gap-2">
                 <button
-                  disabled={!isLoggedIn}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-sm bg-white/5 disabled:opacity-50"
-                  title={isLoggedIn ? "Add annotation" : "Login to annotate"}
+                  onClick={() => setDrawMode((v) => !v)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm ${
+                    drawMode
+                      ? "bg-gradient-to-r from-emerald-500 to-cyan-400 text-black border-white/20"
+                      : "bg-white/5 hover:bg-white/10 border-white/10"
+                  }`}
+                  title="Toggle draw mode"
                 >
-                  <Pencil className="h-4 w-4" /> Annotate
+                  <Pencil className="h-4 w-4" /> {drawMode ? "Drawing…" : "Annotate"}
                 </button>
+                  {drawMode && (
+                    <button
+                      onClick={() => annoRef.current?.cancelDrawing?.()}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm bg-white/5 hover:bg-white/10 border-white/10"
+                    >
+                      Cancel draw
+                    </button>
+                  )}
                 <button
                   disabled
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 text-sm bg-white/5 opacity-60"
